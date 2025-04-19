@@ -33,6 +33,9 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
   const [showDebugInfo, setShowDebugInfo] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [drivingInterval, setDrivingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [totalTripInterval, setTotalTripInterval] = useState<NodeJS.Timeout | null>(null)
 
   // Initialize camera when component mounts and isActive changes
   useEffect(() => {
@@ -186,8 +189,35 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
     }
   }, [captureInterval])
 
+  // Toggle fullscreen mode for the camera view
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+  }
+
   // Calculate drowsiness level as percentage
   const drowsinessLevel = Math.min((drowsyCount / drowsyThreshold) * 100, 100)
+
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener("keydown", handleEscKey)
+    return () => {
+      window.removeEventListener("keydown", handleEscKey)
+    }
+  }, [isFullscreen])
+
+  useEffect(() => {
+    return () => {
+      if (drivingInterval) clearInterval(drivingInterval)
+      if (totalTripInterval) clearInterval(totalTripInterval)
+      if (isFullscreen) setIsFullscreen(false)
+    }
+  }, [drivingInterval, totalTripInterval, isFullscreen])
 
   return (
     <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -249,7 +279,7 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
               onClick={stopCamera}
             >
               <CameraOff className="mr-1 h-4 w-4" />
-              Stop
+              Stop Camera
             </Button>
           ) : (
             <Button
@@ -260,7 +290,7 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
               disabled={!isActive}
             >
               <Camera className="mr-1 h-4 w-4" />
-              Start
+              Start Camera
             </Button>
           )}
         </div>
@@ -269,14 +299,75 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
       <div className="relative mb-4 overflow-hidden rounded-lg bg-gray-100">
         {cameraActive ? (
           <>
-            <video ref={videoRef} autoPlay playsInline muted className="h-[200px] w-full object-cover md:h-[300px]" />
-            <canvas ref={canvasRef} className="hidden" />
-            <div
-              className={`absolute bottom-0 left-0 right-0 h-1 transition-all duration-300 ${
-                drowsinessLevel > 66 ? "bg-red-500" : drowsinessLevel > 33 ? "bg-amber-500" : "bg-green-500"
-              }`}
-              style={{ width: `${drowsinessLevel}%` }}
-            ></div>
+            <div className={`relative ${isFullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`${
+                  isFullscreen ? "h-full w-full object-contain" : "h-[200px] w-full object-cover md:h-[300px]"
+                }`}
+              />
+              <div className="absolute top-3 right-3 flex items-center space-x-2">
+                <div className="flex h-6 items-center space-x-1 rounded-full bg-black/50 px-2 text-white backdrop-blur-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                  </span>
+                  <span className="text-xs font-medium">LIVE</span>
+                </div>
+                <button
+                  onClick={toggleFullscreen}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"
+                >
+                  {isFullscreen ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+                      <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+                      <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+                      <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
+                    </svg>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 8V5a2 2 0 0 1 2-2h3"></path>
+                      <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+                      <path d="M21 16v3a2 2 0 0 1-2 2h-3"></path>
+                      <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            {!isFullscreen && (
+              <div
+                className={`absolute bottom-0 left-0 right-0 h-1 transition-all duration-300 ${
+                  drowsinessLevel > 66 ? "bg-red-500" : drowsinessLevel > 33 ? "bg-amber-500" : "bg-green-500"
+                }`}
+                style={{ width: `${drowsinessLevel}%` }}
+              ></div>
+            )}
           </>
         ) : (
           <div className="flex h-[200px] w-full items-center justify-center bg-gray-100 md:h-[300px]">
@@ -308,14 +399,7 @@ export default function DrowsinessDetector({ isActive, onDrowsinessDetected }: D
               {drowsinessLevel.toFixed(0)}%
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-            <div
-              className={`h-full transition-all duration-300 ${
-                drowsinessLevel > 66 ? "bg-red-500" : drowsinessLevel > 33 ? "bg-amber-500" : "bg-green-500"
-              }`}
-              style={{ width: `${drowsinessLevel}%` }}
-            ></div>
-          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">{/* Drowsiness Level Bar */}</div>
 
           {drowsinessLevel > 33 && (
             <div

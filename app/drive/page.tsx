@@ -1,12 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Play, Pause, StopCircle, ArrowLeft, Clock, Timer, RotateCcw } from "lucide-react"
+import { Play, Pause, StopCircle, ArrowLeft, Clock, Timer, RotateCcw, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
+import DrowsinessDetector from "@/components/drowsiness-detector"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import axios from 'axios';
+
+const API_BASE_URL = "http://10.110.171.116:5000";
 
 export default function DrivePage() {
   const router = useRouter()
@@ -15,12 +28,17 @@ export default function DrivePage() {
 
   // Timer states in seconds
   const [drivingTime, setDrivingTime] = useState(0)
-  const [breakInTime, setBreakInTime] = useState(7200) // 2 hours in seconds
+  const [breakInTime, setBreakInTime] = useState(180) // 3 minutes in seconds
   const [totalTripTime, setTotalTripTime] = useState(0)
 
   // Timer intervals
   const [drivingInterval, setDrivingInterval] = useState<NodeJS.Timeout | null>(null)
   const [totalTripInterval, setTotalTripInterval] = useState<NodeJS.Timeout | null>(null)
+
+  // Drowsiness alert state
+  const [showDrowsyAlert, setShowDrowsyAlert] = useState(false)
+  const [drowsyAlertCount, setDrowsyAlertCount] = useState(0)
+  const alertSoundRef = useRef<HTMLAudioElement | null>(null)
 
   // Format time as HH:MM:SS
   const formatTime = (seconds: number) => {
@@ -34,6 +52,31 @@ export default function DrivePage() {
       secs.toString().padStart(2, "0"),
     ].join(":")
   }
+
+  // Initialize audio element
+  useEffect(() => {
+    alertSoundRef.current = new Audio("/alert.mp3")
+    alertSoundRef.current.loop = true
+
+    return () => {
+      if (alertSoundRef.current) {
+        alertSoundRef.current.pause()
+        alertSoundRef.current = null
+      }
+    }
+  }, [])
+
+  // Example usage of the API_BASE_URL
+  // You can replace this with actual API calls using axios or fetch
+  useEffect(() => {
+    axios.post(`${API_BASE_URL}/predict`)
+      .then(response => {
+        console.log('API Response:', response.data);
+      })
+      .catch(error => {
+        console.error('API Error:', error);
+      });
+  }, []);
 
   // Start the trip
   const startTrip = () => {
@@ -99,19 +142,47 @@ export default function DrivePage() {
     }
   }
 
+  // Handle drowsiness detection
+  const handleDrowsinessDetected = () => {
+    setShowDrowsyAlert(true)
+    setDrowsyAlertCount((prev) => prev + 1)
+
+    // Play alert sound
+    if (alertSoundRef.current) {
+      alertSoundRef.current.play().catch((err) => console.error("Error playing alert sound:", err))
+    }
+  }
+
+  // Handle drowsy alert acknowledgment
+  const handleDrowsyAlertAcknowledge = () => {
+    setShowDrowsyAlert(false)
+
+    // Stop alert sound
+    if (alertSoundRef.current) {
+      alertSoundRef.current.pause()
+      alertSoundRef.current.currentTime = 0
+    }
+
+    // Automatically take a break
+    takeBreak()
+  }
+
   // Clean up intervals on unmount
   useEffect(() => {
     return () => {
       if (drivingInterval) clearInterval(drivingInterval)
       if (totalTripInterval) clearInterval(totalTripInterval)
+
+      if (alertSoundRef.current) {
+        alertSoundRef.current.pause()
+      }
     }
   }, [drivingInterval, totalTripInterval])
 
   // Alert when break is needed
   useEffect(() => {
     if (breakInTime === 0 && !onBreak) {
-      alert("Time for a break! Please pull over safely.")
-      takeBreak()
+      handleDrowsinessDetected()
     }
   }, [breakInTime, onBreak])
 
@@ -193,6 +264,10 @@ export default function DrivePage() {
             </Card>
           </div>
 
+          <div className="mt-6">
+            <DrowsinessDetector isActive={tripStarted && !onBreak} onDrowsinessDetected={handleDrowsinessDetected} />
+          </div>
+
           <div className="mt-10 flex flex-col items-center justify-center space-y-4">
             {!tripStarted ? (
               <Button
@@ -257,11 +332,68 @@ export default function DrivePage() {
                 <p className="text-sm text-sky-600">
                   Remember: Regular breaks help prevent drowsiness and keep you safe on the road.
                 </p>
+
+                {drowsyAlertCount > 0 && (
+                  <div className="mt-4 rounded-md bg-red-50 p-3 text-red-800">
+                    <div className="flex">
+                      <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                      <div className="ml-3">
+                        <h4 className="text-sm font-medium">Drowsiness alerts: {drowsyAlertCount}</h4>
+                        <p className="mt-1 text-xs">
+                          You've received {drowsyAlertCount} drowsiness {drowsyAlertCount === 1 ? "alert" : "alerts"}{" "}
+                          during this trip. Consider getting more rest before continuing your journey.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       </main>
+
+      {/* Drowsiness Alert Dialog */}
+      <AlertDialog open={showDrowsyAlert} onOpenChange={setShowDrowsyAlert}>
+        <AlertDialogContent className="border-red-200">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600 flex items-center">
+              <AlertTriangle className="mr-2 h-5 w-5" />
+              Drowsiness Detected!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              Multiple signs of drowsiness have been detected. Please pull over safely and take a break.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-red-400" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Driving while drowsy is dangerous</h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <ul className="list-disc space-y-1 pl-5">
+                      <li>Drowsy driving causes thousands of accidents each year</li>
+                      <li>Your reaction time is significantly impaired</li>
+                      <li>Even a 15-minute break can help restore alertness</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction
+              onClick={handleDrowsyAlertAcknowledge}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Take a Break Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
