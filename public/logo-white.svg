@@ -1,0 +1,6 @@
+<svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 10L40 5L35 25L15 30L20 10Z" fill="#7DD3FC"/>
+  <path d="M10 15L30 10L25 30L5 35L10 15Z" fill="#38BDF8"/>
+  <path d="M0 20L20 15L15 35L-5 40L0 20Z" fill="#E0F2FE"/>
+  <text x="50" y="25" font-family="Arial" font-weight="bold" font-size="18" fill="white">Drowzi</text>
+</svg>
