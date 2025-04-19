@@ -1,0 +1,10 @@
+Lib/
+
+Scripts/
+
+src/ds/DDD/
+src/ds/facial_mappings_standard/
+src/ds/TooTiredForThisDS/ds/
+pyvenv.cfg
+src/ds/TooTiredForThisDS.zip
+share/man/man1/ttx.1
